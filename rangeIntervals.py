@@ -9,14 +9,17 @@ import bisect
 #~ Definitions 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-class intervallist(object):
+class RangeIntervals(object):
     def __init__(self, *args):
         self._ranges = []
+
         if args:
-            if len(args) == 2:
-                args = [args]
-            elif isinstance(args[0], (int, float)):
-                args = [(args,)]
+            # mimic the interface of xrange
+            if len(args) in [1,2] and all(isinstance(a, (int, float)) for a in args):
+                if len(args) == 1:
+                    args = [(0, args[0])]
+                else:
+                    args = [tuple(args)]
             self.update(*args)
 
     def update(self, *args):
@@ -25,9 +28,11 @@ class intervallist(object):
             arg = args.pop(0)
             if isinstance(arg, (int, float)):
                 raise ValueError("Cannot pass raw values to update")
-            elif isinstance(arg, intervallist):
+            elif isinstance(arg, RangeIntervals):
                 args[0:0] = list(arg.findRange())
-            elif isinstance(arg, tuple):
+            elif (isinstance(arg, (tuple, list)) 
+                    and (len(arg) in [1,2]) 
+                    and all(isinstance(a, (int, float)) for a in arg)):
                 self.add(*arg)
             else:
                 args[0:0] = list(arg)
@@ -155,7 +160,7 @@ class intervallist(object):
 
 if __name__=='__main__':
     if 0:
-        rl = intervallist(10, 20)
+        rl = RangeIntervals(10, 20)
         rl.remove(15, 25)
         rl.remove(45, 125)
         rl.remove(5, 9)
@@ -166,7 +171,7 @@ if __name__=='__main__':
         print list(rl)
 
     if 1:
-        rl = intervallist()
+        rl = RangeIntervals()
         rl.add(0,10)
         rl.add(90,100)
         rl.add(25, 75)
