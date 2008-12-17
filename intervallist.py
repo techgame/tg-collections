@@ -9,7 +9,7 @@ import bisect
 #~ Definitions 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-class intervallist(object):
+class IntervalList(object):
     def __init__(self, *args):
         self._ranges = []
         if args:
@@ -19,13 +19,21 @@ class intervallist(object):
                 args = [(args,)]
             self.update(*args)
 
+    @classmethod
+    def fromRangeList(klass, rangeList):
+        self = klass()
+        self._ranges[:] = [(r1,r0) for r0,r1 in rangeList]
+        return self
+    def asRangeList(self):
+        return [(r0,r1) for r1,r0 in self._ranges]
+
     def update(self, *args):
         args = list(args)
         while args:
             arg = args.pop(0)
             if isinstance(arg, (int, float)):
                 raise ValueError("Cannot pass raw values to update")
-            elif isinstance(arg, intervallist):
+            elif isinstance(arg, IntervalList):
                 args[0:0] = list(arg.findRange())
             elif isinstance(arg, tuple):
                 self.add(*arg)
@@ -149,13 +157,27 @@ class intervallist(object):
             sr = slice(s0.start, s1.stop)
             self._ranges[sr] = self._rfilter(lm)
 
+    def removeAfter(self, r0):
+        s0, le0 = self.entryFor(r0)
+        lm = []
+        if le0: lm.append((r0-1, le0[0][1]))
+        sr = slice(s0.start, None)
+        self._ranges[sr] = self._rfilter(lm)
+
+    def removeBefore(self, r1):
+        s1, le1 = self.entryFor(r1)
+        lm = []
+        if le1: lm.append((le1[-1][0], r1))
+        sr = slice(None, s1.stop)
+        self._ranges[sr] = self._rfilter(lm)
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~ Main 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 if __name__=='__main__':
     if 0:
-        rl = intervallist(10, 20)
+        rl = IntervalList(10, 20)
         rl.remove(15, 25)
         rl.remove(45, 125)
         rl.remove(5, 9)
@@ -166,7 +188,7 @@ if __name__=='__main__':
         print list(rl)
 
     if 1:
-        rl = intervallist()
+        rl = IntervalList()
         rl.add(0,10)
         rl.add(90,100)
         rl.add(25, 75)
