@@ -84,13 +84,13 @@ class RangeIntervals(object):
         lst = self._ranges
         if not lst: return 
 
-        if rstart is not None:
-            s0 = self.entryFor(rstart)[0]
-        else: s0 = slice(0,1)
+        if rstart is None:
+            rstart = self.minValue()
+        s0 = self.entryFor(rstart)[0]
 
-        if rstop is not None:
-            s1 = self.entryFor(rstop)[0]
-        else: s1 = slice(-1,len(lst))
+        if rstop is None:
+            rstop = self.maxValue()
+        s1 = self.entryFor(rstop)[0]
 
         for r1, r0 in lst[s0]:
             if rstart is not None:
@@ -125,6 +125,13 @@ class RangeIntervals(object):
         return [e for e in lm if e[0] >= e[1]]
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def minValue(self):
+        for r1,r0 in self._ranges[:1]:
+            return r0
+    def maxValue(self):
+        for r1,r0 in self._ranges[-1:]:
+            return r1
 
     def clear(self):
         del self._ranges[:]
