@@ -4,12 +4,17 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 import bisect
+from itertools import chain
+
+def chain_iterable(iterable):
+    return chain(*iterable)
+chain_iterable = getattr(chain, 'from_iterable', chain_iterable)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~ Definitions 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-class RangeIntervals(object):
+class RangeIntervalsBase(object):
     def __init__(self, *args):
         self._ranges = []
 
@@ -23,13 +28,12 @@ class RangeIntervals(object):
             self.update(*args)
 
     @classmethod
-    def fromRangeList(klass, rangeList):
+    def fromRanges(klass, ranges):
         self = klass()
-        self._ranges[:] = [(r1,r0) for r0,r1 in rangeList]
+        self._ranges[:] = [(r1-1,r0) for r0,r1 in ranges]
         return self
-    def ranges(self):
-        return list(self.findRange())
-    asRangeList = ranges
+    def ranges(self, rstart=None, rend=None):
+        return list(self.findRanges(rstart, rend))
 
     def update(self, *args):
         args = list(args)
@@ -38,7 +42,7 @@ class RangeIntervals(object):
             if isinstance(arg, (long, int, float)):
                 raise ValueError("Cannot pass raw values to update")
             elif isinstance(arg, RangeIntervals):
-                args[0:0] = list(arg.findRange())
+                args[0:0] = list(arg.findRanges())
             elif (isinstance(arg, (tuple, list)) 
                     and (len(arg) in [1,2]) 
                     and all(isinstance(a, (long, int, float)) for a in arg)):
@@ -48,10 +52,12 @@ class RangeIntervals(object):
 
     def copyRange(self, rstart=None, rstop=None):
         r = self.__class__()
-        r.update(self.findRange(rstart, rstop))
+        r.update(self.findRanges(rstart, rstop))
         return r
     def copy(self):
         return self.copyRange(None, None)
+
+    __copy__ = copy # For the copy module
     
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -60,9 +66,9 @@ class RangeIntervals(object):
         return '<%s %s>' % (self.__class__.__name__, k)
 
     def __len__(self):
-        n = 0
+        n = len(self._ranges) # account for +1 on each item
         for r1, r0 in self._ranges:
-            n += r1-r0+1
+            n += r1-r0
         return n
 
     def __contains__(self, value):
@@ -70,18 +76,17 @@ class RangeIntervals(object):
         return bool(le)
 
     def __iter__(self):
-        return self.iterRange(None, None)
+        return self.iter()
+    def iter(self, rstart=None, rstop=None):
+        return chain_iterable(xrange(r0, r1) for r0, r1 in self.findRanges(rstart, rstop))
 
-    def iterRange(self, rstart=None, rstop=None):
-        for r0, r1 in self.findRange(rstart, rstop):
-            for v in xrange(r0, r1):
-                yield v
-
+    def blocks(self, rstart=None, rstop=None):
+        return list(self.iterBlocks(rstart, rstop))
     def iterBlocks(self, rstart=None, rstop=None):
-        for r0, r1 in self.findRange(rstart, rstop):
+        for r0, r1 in self.findRanges(rstart, rstop):
             yield range(r0,r1)
 
-    def findRange(self, rstart=None, rstop=None):
+    def findRanges(self, rstart=None, rstop=None):
         lst = self._ranges
         if not lst: return 
 
@@ -90,7 +95,7 @@ class RangeIntervals(object):
         s0 = self.entryFor(rstart)[0]
 
         if rstop is None:
-            rstop = self.maxValue()
+            rstop = self.maxValue()+1
         s1 = self.entryFor(rstop)[0]
 
         for r1, r0 in lst[s0]:
@@ -98,13 +103,16 @@ class RangeIntervals(object):
                 r0 = rstart
             yield (r0,r1+1)
 
+        if s0 == s1: return
+
         for r1, r0 in lst[s0.stop:s1.start]:
             yield (r0,r1+1)
 
         for r1, r0 in lst[s1]:
             if rstop is not None:
                 r1 = rstop
-            yield (r0,r1+1)
+            else: r1 = r1 + 1
+            yield (r0,r1)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -138,51 +146,199 @@ class RangeIntervals(object):
         del self._ranges[:]
 
     def add(self, r0, r1=None):
-        if r1 is None: 
-            r1 = r0+1
-        elif r0>r1:
-            return
+        if r1 is None: r1 = r0+1
+        return self._addRange(r0, r1, False)
 
+    def remove(self, r0, r1=None):
+        if r1 is None: r1 = r0+1
+        return self._removeRange(r0, r1, False)
+
+    def pop(self, r0=None, r1=None):
+        if r0 is None: r0 = self.minValue()
+        if r1 is None: r1 = r0 + 1
+        elif r0>r1: return
+        return self._removeRange(r0, r1, True)
+
+    def removeAfter(self, r0):
+        return self._removeRange(r0, None, False)
+    def popAfter(self, r0):
+        return self._removeRange(r0, None, True)
+
+    def removeBefore(self, r1):
+        return self._removeRange(None, r1, False)
+    def popBefore(self, r1):
+        return self._removeRange(None, r1, True)
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def _addRange(self, r0, r1, pop=True):
         s0, le0 = self.entryFor(r0-1)
         s1, le1 = self.entryFor(r1)
 
-        if s0.start <= s1.start:
-            if le0: r0 = le0[0][1]
-            if le1: r1 = le1[-1][0]+1
+        if s0.start > s1.start: 
+            return [] if pop else None
 
-            lm = [(r1-1, r0)]
-            sr = slice(s0.start, s1.stop)
-            self._ranges[sr] = self._rfilter(lm)
+        if le0: r0 = le0[0][1]
+        if le1: r1 = le1[-1][0]+1
 
-    def remove(self, r0, r1=None):
-        if r1 is None: 
-            r1 = r0+1
-        elif r0>r1:
-            return
+        lm = [(r1-1, r0)]
+        sr = slice(s0.start, s1.stop)
+        result = self._ranges[sr] if pop else None
+        self._ranges[sr] = self._rfilter(lm)
+        return result
 
+    def _removeRange(self, r0=None, r1=None, pop=True):
         s0, le0 = self.entryFor(r0)
         s1, le1 = self.entryFor(r1)
-        if s0.start <= s1.start:
-            lm = []
-            if le0: lm.append((r0-1, le0[0][1]))
-            if le1: lm.append((le1[-1][0], r1))
 
-            sr = slice(s0.start, s1.stop)
-            self._ranges[sr] = self._rfilter(lm)
+        if s0.start > s1.start: 
+            return [] if pop else None
 
-    def removeAfter(self, r0):
-        s0, le0 = self.entryFor(r0)
         lm = []
         if le0: lm.append((r0-1, le0[0][1]))
-        sr = slice(s0.start, None)
-        self._ranges[sr] = self._rfilter(lm)
-
-    def removeBefore(self, r1):
-        s1, le1 = self.entryFor(r1)
-        lm = []
         if le1: lm.append((le1[-1][0], r1))
-        sr = slice(None, s1.stop)
+
+        sr = slice(s0.start, s1.stop)
+        result = self._ranges[sr] if pop else None
         self._ranges[sr] = self._rfilter(lm)
+        return result
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class RangeIntervals(RangeIntervalsBase):
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    #~ Set-like interface
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def __or__(self, other):
+        """Return the union of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in either RangeIntervals.)
+        """
+        return self.union(other)
+
+    def union(self, other):
+        """Return the union of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in either RangeIntervals.)
+        """
+        result = self.copy()
+        result.union_update(other)
+        return result
+
+    def __ior__(self, other):
+        """Update a RangeIntervals with the union of itself and another."""
+        self.union_update(other)
+        return self
+
+    def union_update(self, other):
+        """Update a RangeIntervals with the union of itself and another."""
+        self.update(other)
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    #~ Intersection
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def __and__(self, other):
+        """Return the intersection of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in both RangeIntervals.)
+        """
+        return self.intersection(other)
+
+    def intersection(self, other):
+        """Return the intersection of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in both RangeIntervals.)
+        """
+        result = self.copy()
+        result.intersection_update(other)
+        return result
+
+    def __iand__(self, other):
+        """Update a RangeIntervals with the intersection of itself and another."""
+        self.intersection_update(other)
+        return self
+
+    def intersection_update(self, other):
+        """Update a RangeIntervals with the intersection of itself and another."""
+        if not isinstance(other, RangeIntervals):
+            other = RangeIntervals(other)
+
+        pr1 = None
+        for r0, r1 in other.findRanges():
+            self.remove(pr1, r0)
+            pr1 = r1
+        self.remove(pr1, None)
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    #~ Difference
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def  __sub__(self, other):
+        """Return the difference of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in this RangeIntervals and not in the other.)
+        """
+        return self.difference(other)
+
+    def difference(self, other):
+        """Return the difference of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in this RangeIntervals and not in the other.)
+        """
+        result = self.copy()
+        result.difference_update(other)
+        return result
+
+    def __isub__(self, other):
+        """Remove all elements of another RangeIntervals from this RangeIntervals."""
+        self.difference_update(other)
+        return self
+
+    def difference_update(self, other):
+        """Remove all elements of another RangeIntervals from this RangeIntervals."""
+        if not isinstance(other, RangeIntervals):
+            other = RangeIntervals(other)
+
+        for r0, r1 in other.findRanges():
+            self.remove(r0, r1)
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    #~ Symmetric Difference
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def __xor__(self, other):
+        """Return the symmetric difference of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in exactly one of the RangeIntervals.)
+        """
+        return self.symmetric_difference(other)
+
+    def symmetric_difference(self, other):
+        """Return the symmetric difference of two RangeIntervals as a new RangeIntervals.
+
+        (I.e. all elements that are in exactly one of the RangeIntervals.)
+        """
+        result = self.copy()
+        result.symmetric_difference_update(other)
+        return result
+
+    def __ixor__(self, other):
+        """Update a RangeIntervals with the symmetric difference of itself and another."""
+        self.symmetric_difference_update(other)
+        return self
+
+    def symmetric_difference_update(self, other):
+        """Update a RangeIntervals with the symmetric difference of itself and another."""
+        if not isinstance(other, RangeIntervals):
+            other = RangeIntervals(other)
+
+        for r0, r1 in other.findRanges():
+            nsRanges = list(self.findRanges(r0, r1))
+            self.add(r0, r1)
+            for n0, n1 in nsRanges:
+                self.remove(n0, n1)
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~ Main 
@@ -209,20 +365,20 @@ if __name__=='__main__':
 
         print rl
         print
-        print 'findRange: [5,95)'
-        print list(rl.findRange(5, 95))
+        print 'findRanges: [5,95)'
+        print list(rl.findRanges(5, 95))
 
         print
         print 'block: [5,95)'
-        print list(rl.iterBlocks(5, 95))
+        print rl.blocks(5, 95)
 
         print
-        print 'iterRange: [5,95)'
-        print list(rl.iterRange(5, 95))
+        print 'iter: [5,95)'
+        print list(rl.iter(5, 95))
 
         print 
         print 'iterBlocks:'
-        print list(rl.iterBlocks())
+        print rl.blocks()
         print 
         print 'iter:'
         print list(rl)
@@ -235,11 +391,11 @@ if __name__=='__main__':
         print irl
 
         print
-        print 'irl findRange:'
-        print list(irl.findRange())
+        print 'irl findRanges:'
+        print list(irl.findRanges())
 
         print
         print 'irl block:'
-        print list(irl.iterBlocks())
+        print irl.blocks()
 
 
