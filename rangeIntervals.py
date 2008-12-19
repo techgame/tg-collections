@@ -27,8 +27,9 @@ class RangeIntervals(object):
         self = klass()
         self._ranges[:] = [(r1,r0) for r0,r1 in rangeList]
         return self
-    def asRangeList(self):
-        return [(r0,r1) for r1,r0 in self._ranges]
+    def ranges(self):
+        return list(self.findRange())
+    asRangeList = ranges
 
     def update(self, *args):
         args = list(args)
