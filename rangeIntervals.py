@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~ Imports 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -27,6 +26,15 @@ class RangeIntervalsBase(object):
                     args = [tuple(args)]
             self.update(*args)
 
+    def __repr__(self):
+        k = ' '.join(('[%s,%s)'%(r0,r1+1) for r1,r0 in self._ranges))
+        return '<%s %s>' % (self.__class__.__name__, k)
+
+    def __cmp__(self, other):
+        if not isinstance(other, RangeIntervalsBase):
+            other = RangeIntervalsBase(other)
+        return cmp(self.ranges(), other.ranges())
+
     @classmethod
     def fromRanges(klass, ranges):
         self = klass()
@@ -35,13 +43,15 @@ class RangeIntervalsBase(object):
     def ranges(self, rstart=None, rend=None):
         return list(self.findRanges(rstart, rend))
 
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     def update(self, *args):
         args = list(args)
         while args:
             arg = args.pop(0)
             if isinstance(arg, (long, int, float)):
                 raise ValueError("Cannot pass raw values to update")
-            elif isinstance(arg, RangeIntervals):
+            elif isinstance(arg, RangeIntervalsBase):
                 args[0:0] = list(arg.findRanges())
             elif (isinstance(arg, (tuple, list)) 
                     and (len(arg) in [1,2]) 
@@ -49,6 +59,8 @@ class RangeIntervalsBase(object):
                 self.add(*arg)
             else:
                 args[0:0] = list(arg)
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def copyRange(self, rstart=None, rstop=None):
         r = self.__class__()
@@ -60,10 +72,6 @@ class RangeIntervalsBase(object):
     __copy__ = copy # For the copy module
     
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def __repr__(self):
-        k = ' '.join(('[%s,%s)'%(r0,r1+1) for r1,r0 in self._ranges))
-        return '<%s %s>' % (self.__class__.__name__, k)
 
     def __len__(self):
         n = len(self._ranges) # account for +1 on each item
@@ -262,8 +270,8 @@ class RangeIntervals(RangeIntervalsBase):
 
     def intersection_update(self, other):
         """Update a RangeIntervals with the intersection of itself and another."""
-        if not isinstance(other, RangeIntervals):
-            other = RangeIntervals(other)
+        if not isinstance(other, RangeIntervalsBase):
+            other = RangeIntervalsBase(other)
 
         pr1 = None
         for r0, r1 in other.findRanges():
@@ -298,8 +306,8 @@ class RangeIntervals(RangeIntervalsBase):
 
     def difference_update(self, other):
         """Remove all elements of another RangeIntervals from this RangeIntervals."""
-        if not isinstance(other, RangeIntervals):
-            other = RangeIntervals(other)
+        if not isinstance(other, RangeIntervalsBase):
+            other = RangeIntervalsBase(other)
 
         for r0, r1 in other.findRanges():
             self.remove(r0, r1)
@@ -331,71 +339,12 @@ class RangeIntervals(RangeIntervalsBase):
 
     def symmetric_difference_update(self, other):
         """Update a RangeIntervals with the symmetric difference of itself and another."""
-        if not isinstance(other, RangeIntervals):
-            other = RangeIntervals(other)
+        if not isinstance(other, RangeIntervalsBase):
+            other = RangeIntervalsBase(other)
 
         for r0, r1 in other.findRanges():
             nsRanges = list(self.findRanges(r0, r1))
             self.add(r0, r1)
             for n0, n1 in nsRanges:
                 self.remove(n0, n1)
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#~ Main 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-if __name__=='__main__':
-    if 0:
-        rl = RangeIntervals(10, 20)
-        rl.remove(15, 25)
-        rl.remove(45, 125)
-        rl.remove(5, 9)
-
-        map(rl.remove, [10, 13])
-
-        print rl
-        print list(rl)
-
-    if 1:
-        rl = RangeIntervals()
-        rl.add(0,10)
-        rl.add(90,100)
-        rl.add(25, 75)
-        rl.remove(35, 65)
-
-        print rl
-        print
-        print 'findRanges: [5,95)'
-        print list(rl.findRanges(5, 95))
-
-        print
-        print 'block: [5,95)'
-        print rl.blocks(5, 95)
-
-        print
-        print 'iter: [5,95)'
-        print list(rl.iter(5, 95))
-
-        print 
-        print 'iterBlocks:'
-        print rl.blocks()
-        print 
-        print 'iter:'
-        print list(rl)
-
-    if 1:
-        irl = rl.copyRange(7, 93)
-
-        print
-        print 'irl:'
-        print irl
-
-        print
-        print 'irl findRanges:'
-        print list(irl.findRanges())
-
-        print
-        print 'irl block:'
-        print irl.blocks()
-
 

@@ -85,6 +85,19 @@ class TestRangeListBase(unittest.TestCase):
         self.assertEqual(rl.ranges(30,None), [(30, 35), (65, 75), (90,100)])
         self.assertEqual(rl.ranges(None,70), [(0,10), (25, 35), (65, 70)])
 
+    def testRemove(self):
+        rl = RangeIntervals(10, 20)
+        self.assertEqual(rl.ranges(), [(10, 20)])
+        self.assertEqual(list(rl), range(10, 20))
+
+        rl.remove(13,17)
+        self.assertEqual(rl.ranges(), [(10,13), (17, 20)])
+        self.assertEqual(list(rl), range(10, 13)+range(17,20))
+
+        self.assertEqual(rl, rl - (13, 17))
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 class TestRangeListSets(unittest.TestCase):
     rl0 = RangeIntervals([(0,10), (20, 30)])
     rl1 = RangeIntervals([(-3, 2), (8,12), (18, 22), (28, 34)])
