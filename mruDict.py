@@ -140,6 +140,12 @@ class MRUDict(object):
     def __delitem__(self, key, value):
         self.pop(key)
 
+    def setdefault(self, key, value):
+        r = self.find(key, _sentinal, False)
+        if r is _sentinal:
+            self.add(key, value)
+            r = value
+        return r
     def update(self, *args, **kw):
         return self.dq[0].update(*args, **kw)
 
