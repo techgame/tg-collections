@@ -35,6 +35,11 @@ class RangeIntervalsBase(object):
             other = RangeIntervalsBase(other)
         return cmp(self.ranges(), other.ranges())
 
+    def __getstate__(self):
+        return self._ranges
+    def __setstate__(self, ranges):
+        self._ranges = ranges
+
     @classmethod
     def fromRanges(klass, ranges):
         self = klass()
