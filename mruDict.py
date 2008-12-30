@@ -23,7 +23,12 @@ class MRUDict(object):
         if not isinstance(count, list):
             dq = [{} for x in xrange(count)]
         else: dq = count
-        self.dq = collections.deque(dq)
+
+        dq = collections.deque(dq)
+        for e in dq:
+            e.get; e.pop
+
+        self.dq = dq
 
     def __missing__(self, key):
         raise KeyError("No entry for key: %r" % (key,))
@@ -119,6 +124,8 @@ class MRUDict(object):
 
     def __len__(self):
         return sum((len(e) for e in self.dq), 0)
+    def __contains__(self, key):
+        return self.find(key, _sentinal, False) is not _sentinal
     def __iter__(self):
         for grp in self.dq:
             for e in grp:
