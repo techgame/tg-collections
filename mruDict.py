@@ -75,12 +75,17 @@ class MRUDict(object):
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def qlen(self):
+        return len(self.dq)
+    def qiter(self):
+        return iter(self.dq)
+
     def qmerge(self, count=1, merge=True):
         dq = self.dq
         if len(dq) <= 1: 
             return
 
-        r = self.popright(count, merge)
+        r = self.qpop(count, merge)
         self.qpushleft(count)
         return r
 
@@ -132,8 +137,6 @@ class MRUDict(object):
                 yield e
 
     def __getitem__(self, key):
-        if isinstance(key, slice):
-            return self.copy(key)
         return self.access(key)
     def __setitem__(self, key, value):
         self.add(key, value)
