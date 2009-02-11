@@ -83,6 +83,8 @@ class RangeIntervalsBase(object):
         for r1, r0 in self._ranges:
             n += r1-r0
         return n
+    def rangeLen(self):
+        return [(1+r1-r0) for r1, r0 in self._ranges]
 
     def __contains__(self, value):
         le = self.entryFor(value)[1]
