@@ -1,3 +1,11 @@
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+##~ Copyright (C) 2002-2010  TechGame Networks, LLC.              ##
+##~                                                               ##
+##~ This library is free software; you can redistribute it        ##
+##~ and/or modify it under the terms of the MIT style License as  ##
+##~ found in the LICENSE file included with this distribution.    ##
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #~ Imports 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -12,14 +20,16 @@ from collections import deque
 class PhasedDict(object):
     PhaseDict = dict
 
-    def __init__(self, maxlen=5, PhaseDict=None):
-        self._initPhases(maxlen, PhaseDict)
+    def __init__(self, phaseMaxLen=5, PhaseDict=None):
+        self._initPhases(phaseMaxLen, PhaseDict)
 
-    def _initPhases(self, maxlen=5, PhaseDict=None):
+    _phases = None
+    def _initPhases(self, phaseMaxLen=5, PhaseDict=None):
         # phases is a deque with the oldest on the left
         if PhaseDict is not None:
             self.PhaseDict = PhaseDict
-        self._phases = deque(maxlen=maxlen)
+
+        self.phaseMaxLen = phaseMaxLen
         self.pushPhase()
 
     def pushPhase(self):
@@ -29,6 +39,13 @@ class PhasedDict(object):
         return top
     def popPhase(self):
         return self._phases.popleft()
+
+    def getPhaseMaxLen(self):
+        return self._phaseMaxLen
+    def setPhaseMaxLen(self, phaseMaxLen):
+        self._phaseMaxLen = phaseMaxLen
+        self._phases = deque(self._phases or [], phaseMaxLen)
+    phaseMaxLen = property(getPhaseMaxLen, setPhaseMaxLen)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     #~ Mapping API
@@ -127,7 +144,7 @@ class PhasedDict(object):
         else: return None
 
     def faultKey(self, key, default=None):
-        p = self._findPhase(key)
+        p = self.findPhase(key)
         if p is None:
             return default
         res = p.pop(key)
