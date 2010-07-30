@@ -95,6 +95,9 @@ class PhasedDict(object):
         for p in self._phases:
             p.pop(key, None)
 
+    def __missing__(self, key):
+        raise KeyError(key)
+
     def get(self, key, default=None):
         NA = self._notAvailable
         res = self.top.get(key, NA)
