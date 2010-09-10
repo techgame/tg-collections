@@ -35,7 +35,6 @@ class PhasedDict(object):
     def pushPhase(self):
         top = self.PhaseDict()
         self._phases.append(top)
-        self.top = top
         return top
     def popPhase(self):
         return self._phases.popleft()
@@ -51,6 +50,10 @@ class PhasedDict(object):
     #~ Mapping API
     #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def _topPhase(self):
+        return self._phases[-1]
+    _top = property(_topPhase)
+
     def clear(self):
         self._phases.clear()
         self.pushPhase()
@@ -63,8 +66,8 @@ class PhasedDict(object):
         return r
 
     def update(self, *args, **kw):
-        return self.top.update(*args, **kw)
-
+        self._top.update(*args, **kw)
+        self.filterKeyDuplicates()
 
     def __len__(self):
         return sum(len(p) for p in self._phases)
@@ -107,7 +110,9 @@ class PhasedDict(object):
             res = self.__missing__(key)
         return res
     def __setitem__(self, key, value):
-        self.top[key] = value
+        self._top[key] = value
+        for p in self._phases[:-1]:
+            p.pop(key, None)
     def __delitem__(self, key):
         for p in self._phases:
             p.pop(key, None)
@@ -117,7 +122,7 @@ class PhasedDict(object):
 
     def get(self, key, default=None):
         NA = self._notAvailable
-        res = self.top.get(key, NA)
+        res = self._top.get(key, NA)
         if res is not NA:
             return res
 
@@ -125,7 +130,7 @@ class PhasedDict(object):
         return default
 
     def pop(self, key, default=None):
-        p = self.faultKey(key)
+        p = self.findPhase(key)
         if p is None:
             return default
         return p.pop(key)
@@ -148,6 +153,14 @@ class PhasedDict(object):
         if p is None:
             return default
         res = p.pop(key)
-        self.top[key] = res
+        self._top[key] = res
         return res
+
+    def filterKeyDuplicates(self):
+        allKeys = set()
+        for p in reversed(self._phases):
+            pk = set(p.keys())
+            for k in (allKeys & pk):
+                del p[k]
+            allKeys.update(pk)
 
