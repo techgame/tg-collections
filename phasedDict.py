@@ -111,7 +111,9 @@ class PhasedDict(object):
         return res
     def __setitem__(self, key, value):
         self._top[key] = value
-        for p in self._phases[:-1]:
+        iterPhases = reversed(self._phases)
+        iterPhases.next() # skip top
+        for p in iterPhases:
             p.pop(key, None)
     def __delitem__(self, key):
         for p in self._phases:
